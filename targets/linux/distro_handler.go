@@ -105,7 +105,9 @@ func HandleContainer(c DistroConfig) gwclient.BuildFunc {
 
 			worker := c.Worker(sOpt, opts...)
 
-			pkgSt, foundPrebuiltPkg := getPrebuiltPackage(ctx, targetKey, client, opts, sOpt) // Pre-built package wasn't found so we need to build it.
+			pkgSt, foundPrebuiltPkg := getPrebuiltPackage(ctx, targetKey, client, opts, sOpt)
+
+			// Pre-built package wasn't found so we need to build it.
 			if !foundPrebuiltPkg {
 				pkgSt = c.BuildPkg(ctx, client, worker, sOpt, spec, targetKey, opts...)
 			}
@@ -140,7 +142,9 @@ func HandleSysext(c DistroConfig) gwclient.BuildFunc {
 
 			worker := c.Worker(sOpt, opts...)
 
-			pkgSt, foundPrebuiltPkg := getPrebuiltPackage(ctx, targetKey, client, opts, sOpt) // Pre-built package wasn't found so we need to build it.
+			pkgSt, foundPrebuiltPkg := getPrebuiltPackage(ctx, targetKey, client, opts, sOpt)
+
+			// Pre-built package wasn't found so we need to build it.
 			if !foundPrebuiltPkg {
 				pkgSt = c.BuildPkg(ctx, client, worker, sOpt, spec, targetKey, opts...)
 			}
