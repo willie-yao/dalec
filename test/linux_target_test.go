@@ -1556,7 +1556,7 @@ Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/boot
 					Inline: &dalec.SourceInline{
 						Dir: &dalec.SourceInlineDir{
 							Files: map[string]*dalec.SourceInlineFile{
-								"go.mod": {Contents: "module example.com/test\n\ngo 1.21\n"},
+								"go.mod": {Contents: "module example.com/test\n\ngo 1.18\n"},
 								"main.go": {Contents: `package main
 import (
 	"fmt"
@@ -1622,7 +1622,7 @@ func main() {
 					Inline: &dalec.SourceInline{
 						Dir: &dalec.SourceInlineDir{
 							Files: map[string]*dalec.SourceInlineFile{
-								"go.mod": {Contents: "module example.com/test\n\ngo 1.21\n\nrequire github.com/stretchr/testify v1.9.0\n"},
+								"go.mod": {Contents: "module example.com/test\n\ngo 1.18\n\nrequire github.com/stretchr/testify v1.9.0\n"},
 								"main.go": {Contents: `package main
 import (
 	"fmt"
@@ -1689,7 +1689,7 @@ func main() {
 					Inline: &dalec.SourceInline{
 						Dir: &dalec.SourceInlineDir{
 							Files: map[string]*dalec.SourceInlineFile{
-								"go.mod": {Contents: "module example.com/test\n\ngo 1.21\n"},
+								"go.mod": {Contents: "module example.com/test\n\ngo 1.18\n"},
 								"main.go": {Contents: `package main
 import (
 	"fmt"
@@ -1754,7 +1754,7 @@ func main() {
 		// Create a multi-module repo with two modules
 		contextSt := llb.Scratch().
 			File(llb.Mkdir("/module1", 0755)).
-			File(llb.Mkfile("/module1/go.mod", 0644, []byte("module example.com/module1\n\ngo 1.21\n"))).
+			File(llb.Mkfile("/module1/go.mod", 0644, []byte("module example.com/module1\n\ngo 1.18\n"))).
 			File(llb.Mkfile("/module1/main.go", 0644, []byte(`package main
 import (
 	"fmt"
@@ -1766,7 +1766,7 @@ func main() {
 }
 `))).
 			File(llb.Mkdir("/module2", 0755)).
-			File(llb.Mkfile("/module2/go.mod", 0644, []byte("module example.com/module2\n\ngo 1.21\n"))).
+			File(llb.Mkfile("/module2/go.mod", 0644, []byte("module example.com/module2\n\ngo 1.18\n"))).
 			File(llb.Mkfile("/module2/main.go", 0644, []byte(`package main
 import (
 	"fmt"
@@ -1834,7 +1834,7 @@ func main() {
 		// Create a context with a subdirectory structure
 		contextSt := llb.Scratch().
 			File(llb.Mkdir("/subdir", 0755)).
-			File(llb.Mkfile("/subdir/go.mod", 0644, []byte("module example.com/test\n\ngo 1.21\n"))).
+			File(llb.Mkfile("/subdir/go.mod", 0644, []byte("module example.com/test\n\ngo 1.18\n"))).
 			File(llb.Mkfile("/subdir/main.go", 0644, []byte(`package main
 import (
 	"fmt"
