@@ -163,6 +163,19 @@ func (s *Spec) generateGomodPatchStateForSource(sourceName string, gen *SourceGe
 	// Build script to apply gomod edits and capture all diffs
 	script := &strings.Builder{}
 	script.WriteString("set -e\n")
+
+	// Add Go to PATH if it's installed in a versioned directory (common on Ubuntu)
+	// Check /usr/lib/go-*/bin and add the latest version to PATH
+	script.WriteString("# Ensure Go is in PATH\n")
+	script.WriteString("if ! command -v go >/dev/null 2>&1; then\n")
+	script.WriteString("  for godir in /usr/lib/go-*/bin; do\n")
+	script.WriteString("    if [ -d \"$godir\" ] && [ -x \"$godir/go\" ]; then\n")
+	script.WriteString("      export PATH=\"$godir:$PATH\"\n")
+	script.WriteString("      break\n")
+	script.WriteString("    fi\n")
+	script.WriteString("  done\n")
+	script.WriteString("fi\n\n")
+
 	script.WriteString("export GOMODCACHE=\"${TMP_GOMODCACHE}\"\n")
 	script.WriteString(": > " + patchPath + "\n")
 	fmt.Fprintf(script, "echo 'Generating gomod patch with edits: %s'\n\n", editCmd)
