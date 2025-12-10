@@ -1,14 +1,19 @@
 package dalec
 
 import (
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/moby/buildkit/client/llb"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/pkg/errors"
 )
+
+//go:embed scripts/gomod-patch.sh
+var gomodPatchScriptTmpl string
 
 const (
 	// Gomod preprocessing constants
@@ -132,6 +137,129 @@ func gomodEditCommand(g *GeneratorGomod) (string, error) {
 	return "go mod edit " + strings.Join(args, " "), nil
 }
 
+// moduleInfo holds information about a Go module to be processed
+type moduleInfo struct {
+	RelModulePath string
+	ModuleDir     string
+	GoModPath     string
+	GoSumPath     string
+	RelGoModPath  string
+	RelGoSumPath  string
+}
+
+// scriptTemplateData holds data for the gomod patch script template
+type scriptTemplateData struct {
+	PatchPath     string
+	EditCmd       string
+	GitConfig     string
+	GoPrivate     string
+	GoInsecure    string
+	GoModFilename string
+	GoSumFilename string
+	Modules       []moduleInfo
+}
+
+// buildGomodPatchScript generates the shell script that applies gomod edits and captures diffs
+func buildGomodPatchScript(editCmd string, paths []string, gen *SourceGenerator, sourceName string, patchOutputDir string) (string, error) {
+	const (
+		workDir = "/work/src"
+	)
+
+	patchPath := filepath.Join(patchOutputDir, gomodPatchFilename)
+	joinedWorkDir := filepath.Join(workDir, sourceName, gen.Subpath)
+
+	// Build git config section
+	gitConfig := &strings.Builder{}
+	var goPrivate, goInsecure string
+
+	sortedHosts := SortMapKeys(gen.Gomod.Auth)
+	if len(sortedHosts) > 0 {
+		goPrivateHosts := make([]string, 0, len(sortedHosts))
+		for _, host := range sortedHosts {
+			auth := gen.Gomod.Auth[host]
+			gpHost, _, _ := strings.Cut(host, ":")
+			goPrivateHosts = append(goPrivateHosts, gpHost)
+
+			if sshConfig := auth.SSH; sshConfig != nil {
+				username := defaultGitUsername
+				if sshConfig.Username != "" {
+					username = sshConfig.Username
+				}
+				fmt.Fprintf(gitConfig, "git config --global url.\"ssh://%[1]s@%[2]s/\".insteadOf https://%[3]s/\n", username, host, gpHost)
+				continue
+			}
+
+			var kind string
+			switch {
+			case auth.Token != "":
+				kind = "token"
+			case auth.Header != "":
+				kind = "header"
+			default:
+				kind = ""
+			}
+
+			if kind != "" {
+				fmt.Fprintf(gitConfig, "git config --global credential.\"https://%[1]s.helper\" \"/usr/local/bin/frontend credential-helper --kind=%[2]s\"\n", host, kind)
+			}
+		}
+
+		joined := strings.Join(goPrivateHosts, ",")
+		goPrivate = fmt.Sprintf("%q", joined)
+		goInsecure = fmt.Sprintf("%q", joined)
+	}
+
+	// Build module info for each path
+	modules := make([]moduleInfo, 0, len(paths))
+	for _, relPath := range paths {
+		moduleDir := filepath.Clean(filepath.Join(joinedWorkDir, relPath))
+		relModulePath := filepath.Clean(filepath.Join(gen.Subpath, relPath))
+		if relModulePath == "." {
+			relModulePath = ""
+		}
+
+		relGoModPath := filepath.ToSlash(filepath.Join(relModulePath, gomodFilename))
+		relGoSumPath := filepath.ToSlash(filepath.Join(relModulePath, gosumFilename))
+
+		goModPath := filepath.Join(moduleDir, gomodFilename)
+		goSumPath := filepath.Join(moduleDir, gosumFilename)
+
+		modules = append(modules, moduleInfo{
+			RelModulePath: relModulePath,
+			ModuleDir:     moduleDir,
+			GoModPath:     goModPath,
+			GoSumPath:     goSumPath,
+			RelGoModPath:  relGoModPath,
+			RelGoSumPath:  relGoSumPath,
+		})
+	}
+
+	// Prepare template data
+	data := scriptTemplateData{
+		PatchPath:     patchPath,
+		EditCmd:       editCmd,
+		GitConfig:     gitConfig.String(),
+		GoPrivate:     goPrivate,
+		GoInsecure:    goInsecure,
+		GoModFilename: gomodFilename,
+		GoSumFilename: gosumFilename,
+		Modules:       modules,
+	}
+
+	// Execute template
+	tmpl, err := template.New("gomod-patch").Parse(gomodPatchScriptTmpl)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse gomod patch script template")
+	}
+
+	script := &strings.Builder{}
+	if err := tmpl.Execute(script, data); err != nil {
+		return "", errors.Wrap(err, "failed to execute gomod patch script template")
+	}
+
+	return script.String(), nil
+}
+
 // generateGomodPatchStateForSource generates a single merged patch LLB state for all paths
 // in a gomod generator by running go mod edit + tidy and capturing the diff.
 // Returns the LLB state containing the patch file, or nil if no changes are needed.
@@ -157,116 +285,25 @@ func (s *Spec) generateGomodPatchStateForSource(sourceName string, gen *SourceGe
 
 	// Create a temporary directory for patch generation
 	patchOutputDir := "/tmp/patch-work"
-	patchPath := filepath.Join(patchOutputDir, gomodPatchFilename)
-	joinedWorkDir := filepath.Join(workDir, sourceName, gen.Subpath)
 
-	// Build script to apply gomod edits and capture all diffs
-	script := &strings.Builder{}
-	script.WriteString("set -e\n")
-
-	// Add Go to PATH if it's installed in a versioned directory (common on Ubuntu)
-	// Check /usr/lib/go-*/bin and add the latest version to PATH
-	script.WriteString("# Ensure Go is in PATH\n")
-	script.WriteString("if ! command -v go >/dev/null 2>&1; then\n")
-	script.WriteString("  for godir in /usr/lib/go-*/bin; do\n")
-	script.WriteString("    if [ -d \"$godir\" ] && [ -x \"$godir/go\" ]; then\n")
-	script.WriteString("      export PATH=\"$godir:$PATH\"\n")
-	script.WriteString("      break\n")
-	script.WriteString("    fi\n")
-	script.WriteString("  done\n")
-	script.WriteString("fi\n\n")
-
-	script.WriteString("export GOMODCACHE=\"${TMP_GOMODCACHE}\"\n")
-	script.WriteString(": > " + patchPath + "\n")
-	fmt.Fprintf(script, "echo 'Generating gomod patch with edits: %s'\n\n", editCmd)
-
-	// Setup git auth if needed
-	sortedHosts := SortMapKeys(gen.Gomod.Auth)
-	if len(sortedHosts) > 0 {
-		goPrivateHosts := make([]string, 0, len(sortedHosts))
-		for _, host := range sortedHosts {
-			auth := gen.Gomod.Auth[host]
-			gpHost, _, _ := strings.Cut(host, ":")
-			goPrivateHosts = append(goPrivateHosts, gpHost)
-
-			if sshConfig := auth.SSH; sshConfig != nil {
-				username := defaultGitUsername
-				if sshConfig.Username != "" {
-					username = sshConfig.Username
-				}
-				fmt.Fprintf(script, "git config --global url.\"ssh://%[1]s@%[2]s/\".insteadOf https://%[3]s/\n", username, host, gpHost)
-				continue
-			}
-
-			var kind string
-			switch {
-			case auth.Token != "":
-				kind = "token"
-			case auth.Header != "":
-				kind = "header"
-			default:
-				kind = ""
-			}
-
-			if kind != "" {
-				fmt.Fprintf(script, "git config --global credential.\"https://%[1]s.helper\" \"/usr/local/bin/frontend credential-helper --kind=%[2]s\"\n", host, kind)
-			}
-		}
-
-		joined := strings.Join(goPrivateHosts, ",")
-		fmt.Fprintf(script, "export GOPRIVATE=%q\n", joined)
-		fmt.Fprintf(script, "export GOINSECURE=%q\n\n", joined)
+	// Generate the shell script
+	scriptContent, err := buildGomodPatchScript(editCmd, paths, gen, sourceName, patchOutputDir)
+	if err != nil {
+		return nil, err
 	}
 
-	// Process each path
-	for _, relPath := range paths {
-		moduleDir := filepath.Clean(filepath.Join(joinedWorkDir, relPath))
-		relModulePath := filepath.Clean(filepath.Join(gen.Subpath, relPath))
-		if relModulePath == "." {
-			relModulePath = ""
-		}
-
-		relGoModPath := filepath.ToSlash(filepath.Join(relModulePath, gomodFilename))
-		relGoSumPath := filepath.ToSlash(filepath.Join(relModulePath, gosumFilename))
-
-		goModPath := filepath.Join(moduleDir, gomodFilename)
-		goSumPath := filepath.Join(moduleDir, gosumFilename)
-
-		// Save originals, apply edits, capture diff
-		fmt.Fprintf(script, "# Process %s\n", relModulePath)
-		fmt.Fprintf(script, "if [ -f %q ]; then\n", goModPath)
-		fmt.Fprintf(script, "  tmpdir=$(mktemp -d)\n")
-		fmt.Fprintf(script, "  cp %q \"$tmpdir/%s\"\n", goModPath, gomodFilename)
-		fmt.Fprintf(script, "  if [ -f %[1]q ]; then cp %[1]q \"$tmpdir/%[2]s\"; else : > \"$tmpdir/%[2]s\"; fi\n", goSumPath, gosumFilename)
-		fmt.Fprintf(script, "  cd %q\n", moduleDir)
-		fmt.Fprintf(script, "  %s\n", editCmd)
-		fmt.Fprintf(script, "  go mod tidy\n")
-		fmt.Fprintf(script, "  cd -\n")
-		fmt.Fprintf(script, "  if [ ! -f %[1]q ]; then touch %[1]q; fi\n", goSumPath)
-
-		// Capture diffs and append to patch file
-		fmt.Fprintf(script, "  diff -u --label a/%[1]s --label b/%[1]s \"$tmpdir/%s\" %q >> %s || true\n", relGoModPath, gomodFilename, goModPath, patchPath)
-		fmt.Fprintf(script, "  if [ -f %q ] || [ -s \"$tmpdir/%s\" ]; then\n", goSumPath, gosumFilename)
-		fmt.Fprintf(script, "    diff -u --label a/%[1]s --label b/%[1]s \"$tmpdir/%s\" %q >> %s || true\n", relGoSumPath, gosumFilename, goSumPath, patchPath)
-		fmt.Fprintf(script, "  fi\n")
-		fmt.Fprintf(script, "  rm -rf \"$tmpdir\"\n")
-		fmt.Fprintf(script, "fi\n\n")
-	}
-
-	// Add final status message
-	script.WriteString("echo 'Gomod patch generation complete'\n")
-	script.WriteString("if [ -s " + patchPath + " ]; then\n")
-	script.WriteString("  echo 'Patch file created with changes'\n")
-	script.WriteString("  wc -l " + patchPath + "\n")
-	script.WriteString("else\n")
-	script.WriteString("  echo 'No changes detected - patch file is empty'\n")
-	script.WriteString("fi\n")
+	// Create a state with the script file
+	scriptState := llb.Scratch().File(
+		llb.Mkfile("/gomod-patch.sh", 0755, []byte(scriptContent)),
+		WithConstraints(opts...),
+	)
 
 	// Create a scratch state to capture the patch output
 	patchOutput := llb.Scratch()
 
 	runOpts := []llb.RunOption{
-		ShArgs(script.String()),
+		llb.Args([]string{"/gomod-patch.sh"}),
+		llb.AddMount("/gomod-patch.sh", scriptState, llb.SourcePath("/gomod-patch.sh")),
 		llb.AddMount(workDir, baseState),
 		llb.AddMount(proxyPath, llb.Scratch(), llb.AsPersistentCacheDir(GomodCacheKey, llb.CacheMountShared)),
 		llb.AddMount(patchOutputDir, patchOutput), // Mount scratch state to capture patch file
