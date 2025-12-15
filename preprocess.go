@@ -87,7 +87,7 @@ func (s *Spec) preprocessGomodEdits(sOpt SourceOpts, worker llb.State, opts ...l
 			}
 
 			// Inject patch reference into spec.Patches
-			// Use PatchSpec.Path to point to the patch file within the context
+			// Don't set Path - the patch file is the entire source (single file)
 			if s.Patches == nil {
 				s.Patches = make(map[string][]PatchSpec)
 			}
@@ -95,7 +95,7 @@ func (s *Spec) preprocessGomodEdits(sOpt SourceOpts, worker llb.State, opts ...l
 			strip := 1
 			s.Patches[sourceName] = append(s.Patches[sourceName], PatchSpec{
 				Source: patchSourceName,
-				Path:   gomodPatchFilename, // The patch file within the context
+				// Path is empty - the entire source is the patch file
 				Strip:  &strip,
 			})
 		}
@@ -327,14 +327,10 @@ func (s *Spec) generateGomodPatchStateForSource(sourceName string, gen *SourceGe
 	// the file in the mount will be at gomodPatchFilename (path relative to mount point)
 	patchMount := worker.Run(runOpts...).AddMount(patchOutputDir, patchOutput)
 
-	// The patch system expects files to be at /{sourceName}/{path}
-	// So we need to copy the patch file to that location
-	patchSourceName := fmt.Sprintf(gomodPatchSourcePrefix+"%s", sourceName)
-	finalPatchPath := filepath.Join("/", patchSourceName, gomodPatchFilename)
-
+	// Create a scratch state with the patch file at a generic location
+	// The sourceFilters will handle renaming it to the final source name
 	patchSt := llb.Scratch().
-		File(llb.Mkdir(filepath.Join("/", patchSourceName), 0755, llb.WithParents(true)), WithConstraints(opts...)).
-		File(llb.Copy(patchMount, "/"+gomodPatchFilename, finalPatchPath), WithConstraints(opts...))
+		File(llb.Copy(patchMount, "/"+gomodPatchFilename, "/patch"), WithConstraints(opts...))
 
 	return &patchSt, nil
 }

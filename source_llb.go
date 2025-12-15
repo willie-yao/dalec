@@ -24,7 +24,7 @@ func newSourceLLB(st llb.State) *SourceLLB {
 }
 
 func (s *SourceLLB) IsDir() bool {
-	return true // Treat as directory since it can contain files
+	return false
 }
 
 func (s *SourceLLB) doc(io.Writer, string) {}
@@ -38,9 +38,16 @@ func (s *SourceLLB) processBuildArgs(*shell.Lex, map[string]string, func(string)
 }
 
 func (s *SourceLLB) toMount(opt fetchOptions) (llb.State, []llb.MountOption) {
-	return s.state, nil
+	st := s.toState(opt)
+	if opt.Rename != "" {
+		return st, []llb.MountOption{llb.SourcePath(opt.Rename)}
+	}
+	return st, nil
 }
 
 func (s *SourceLLB) toState(opt fetchOptions) llb.State {
+	if opt.Rename != "" && opt.Rename != "/" {
+		return llb.Scratch().File(llb.Copy(s.state, "/patch", "/"+opt.Rename, opt), opt.Constraints...)
+	}
 	return s.state
 }
