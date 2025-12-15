@@ -1641,7 +1641,7 @@ func main() {
 							Gomod: &dalec.GeneratorGomod{
 								Edits: &dalec.GomodEdits{
 									Replace: []dalec.GomodReplace{
-										{Old: "github.com/stretchr/testify", New: "github.com/stretchr/testify@v1.8.0"},
+										{Original: "github.com/stretchr/testify", Update: "github.com/stretchr/testify@v1.8.0"},
 									},
 								},
 							},
@@ -1716,7 +1716,7 @@ func main() {
 									},
 									// Replace objx (another stretchr module) with a specific version
 									Replace: []dalec.GomodReplace{
-										{Old: "github.com/stretchr/objx", New: "github.com/stretchr/objx@v0.5.0"},
+										{Original: "github.com/stretchr/objx", Update: "github.com/stretchr/objx@v0.5.0"},
 									},
 								},
 							},

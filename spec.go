@@ -216,25 +216,25 @@ type GomodEdits struct {
 }
 
 // GomodReplace represents a go.mod replace directive.
-// It can be specified as a string "old:new" or as a struct with Old and New fields.
+// It can be specified as a string "old:new" or as a struct with Original and Update fields.
 // This allows users to substitute module dependencies before go mod download runs,
 // useful for pointing to local forks or alternate versions.
 type GomodReplace struct {
-	// Old is the module path to replace (can include @version)
-	Old string `yaml:"old" json:"old"`
-	// New is the replacement module path or local directory
-	New string `yaml:"new" json:"new"`
+	// Original is the module path to replace (can include @version)
+	Original string `yaml:"old" json:"old"`
+	// Update is the replacement module path or local directory
+	Update string `yaml:"new" json:"new"`
 }
 
 func (r GomodReplace) String() string {
-	return r.Old + ":" + r.New
+	return r.Original + ":" + r.Update
 }
 
 func (r GomodReplace) goModEditArg() (string, error) {
-	if r.Old == "" || r.New == "" {
+	if r.Original == "" || r.Update == "" {
 		return "", errors.Errorf("invalid gomod replace, old and new must be non-empty")
 	}
-	return r.Old + "=" + r.New, nil
+	return r.Original + "=" + r.Update, nil
 }
 
 func (r *GomodReplace) UnmarshalYAML(b []byte) error {
@@ -245,9 +245,9 @@ func (r *GomodReplace) UnmarshalYAML(b []byte) error {
 		if len(parts) != 2 {
 			return errors.Errorf("invalid gomod replace %q, expected format old:new", raw)
 		}
-		r.Old = strings.TrimSpace(parts[0])
-		r.New = strings.TrimSpace(parts[1])
-		if r.Old == "" || r.New == "" {
+		r.Original = strings.TrimSpace(parts[0])
+		r.Update = strings.TrimSpace(parts[1])
+		if r.Original == "" || r.Update == "" {
 			return errors.Errorf("invalid gomod replace %q, entries must be non-empty", raw)
 		}
 		return nil
@@ -260,7 +260,7 @@ func (r *GomodReplace) UnmarshalYAML(b []byte) error {
 		return err
 	}
 	*r = GomodReplace(alias)
-	if r.Old == "" || r.New == "" {
+	if r.Original == "" || r.Update == "" {
 		return errors.Errorf("invalid gomod replace, old and new must be non-empty")
 	}
 	return nil
@@ -282,9 +282,9 @@ func (r *GomodReplace) UnmarshalJSON(b []byte) error {
 		if len(parts) != 2 {
 			return errors.Errorf("invalid gomod replace %q, expected format old:new", raw)
 		}
-		r.Old = strings.TrimSpace(parts[0])
-		r.New = strings.TrimSpace(parts[1])
-		if r.Old == "" || r.New == "" {
+		r.Original = strings.TrimSpace(parts[0])
+		r.Update = strings.TrimSpace(parts[1])
+		if r.Original == "" || r.Update == "" {
 			return errors.Errorf("invalid gomod replace %q, entries must be non-empty", raw)
 		}
 		return nil
@@ -297,7 +297,7 @@ func (r *GomodReplace) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*r = GomodReplace(alias)
-	if r.Old == "" || r.New == "" {
+	if r.Original == "" || r.Update == "" {
 		return errors.Errorf("invalid gomod replace, old and new must be non-empty")
 	}
 	return nil

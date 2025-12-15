@@ -460,8 +460,8 @@ sources:
               # String format: "old@version=new@version"
               - "github.com/old/pkg@v1.0.0=github.com/new/pkg@v2.0.0"
               # Struct format for more complex replacements
-              - old: github.com/another/pkg
-                new: ../local/path  # Can use local paths
+              - original: github.com/another/pkg
+                update: ../local/path  # Can use local paths
 ```
 
 **Example using require directive:**

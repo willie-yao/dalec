@@ -825,7 +825,7 @@ index ea874f5..ba38f84 100644
 								Gomod: &dalec.GeneratorGomod{
 									Edits: &dalec.GomodEdits{
 										Replace: []dalec.GomodReplace{
-											{Old: "github.com/cpuguy83/tar2go@v0.3.1", New: "github.com/cpuguy83/tar2go@v0.3.0"},
+											{Original: "github.com/cpuguy83/tar2go@v0.3.1", Update: "github.com/cpuguy83/tar2go@v0.3.0"},
 										},
 									},
 								},
@@ -869,7 +869,7 @@ index ea874f5..ba38f84 100644
 											{Module: "github.com/stretchr/testify", Version: "github.com/stretchr/testify@v1.7.0"},
 										},
 										Replace: []dalec.GomodReplace{
-											{Old: "github.com/stretchr/testify@v1.7.0", New: "github.com/stretchr/testify@v1.8.0"},
+											{Original: "github.com/stretchr/testify@v1.7.0", Update: "github.com/stretchr/testify@v1.8.0"},
 										},
 									},
 								},
