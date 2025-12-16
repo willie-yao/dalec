@@ -1714,7 +1714,7 @@ func main() {
 									Require: []dalec.GomodRequire{
 										{Module: "github.com/stretchr/testify", Version: "github.com/stretchr/testify@v1.8.0"},
 									},
-									// Replace objx (another stretchr module) with a specific version
+									// Replace objx (another stretchr module) with a specific version.
 									Replace: []dalec.GomodReplace{
 										{Original: "github.com/stretchr/objx", Update: "github.com/stretchr/objx@v0.5.0"},
 									},
